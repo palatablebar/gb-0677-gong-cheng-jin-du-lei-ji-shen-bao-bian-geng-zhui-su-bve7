@@ -1,0 +1,53 @@
+{% set comparison=run.comparison %}
+<section class="panel revisions" id="revisions">
+  <div class="panel__head">
+    <h2>结论版本</h2>
+    <span>{{'现行' if run.is_current else '被替代'}} / V{{run.version}}</span>
+  </div>
+  <div class="panel__body">
+    <div class="audit-line"><span>本版结论</span><b>{{run.run_id}}</b></div>
+    <div class="audit-line"><span>生成时的上一版</span><b>{{comparison.from_run_id or '—（首版，无对照）'}}</b></div>
+    <div class="audit-line"><span>本版替代了</span><b>{{run.replaced_run_id or '—（未接替任何版本）'}}</b></div>
+    <div class="audit-line"><span>最近成为现行</span><b>{{run.replaced_at[:19] if run.replaced_at else '—'}}</b></div>
+    <div class="audit-line"><span>若被取代则为</span><b>{{run.superseded_by or '—（现行结论）'}}</b></div>
+    <div class="audit-line"><span>结论指纹</span><b class="mono">{{run.fingerprint[:16]}}</b></div>
+    {% if comparison and not comparison.baseline %}
+    <div class="audit-line"><span>与上一版差异来源</span><b>{% for cause in comparison.causes %}{{cause_labels.get(cause, cause)}}{{'、' if not loop.last}}{% else %}无变化{% endfor %}</b></div>
+    <div class="audit-line"><span>数据</span><b>{{comparison.data.input_sha256.before[:12] or '—'}} → {{comparison.data.input_sha256.after[:12] or '—'}}</b></div>
+    <div class="audit-line"><span>规则版本</span><b>{{comparison.rules.rule_version.before}} → {{comparison.rules.rule_version.after}}</b></div>
+    <div class="audit-line"><span>记录增 / 删 / 改</span><b>{{comparison.records.counts.added}} / {{comparison.records.counts.removed}} / {{comparison.records.counts.changed}}</b></div>
+    <div class="audit-line"><span>差异按来源</span><b>数据 {{comparison.records.by_cause.data}} · 规则 {{comparison.records.by_cause.rule}} · 两者 {{comparison.records.by_cause.both}}</b></div>
+    {% elif comparison and comparison.baseline %}
+    <div class="audit-line"><span>与上一版差异来源</span><b>基线（无可比对版本）</b></div>
+    {% endif %}
+    {% if run.reviews or run.activations %}
+    <div class="audit-line"><span>复核记录</span><b>{% for entry in run.reviews %}V{{entry.version}} {{entry.decision}}{{'；' if not loop.last}}{% else %}—{% endfor %}</b></div>
+    <div class="audit-line"><span>切换记录</span><b>{% for entry in run.activations %}{{entry.activated_at[:19]}} 接替 {{entry.superseded_run_id or '—'}}{{'；' if not loop.last}}{% else %}—{% endfor %}</b></div>
+    {% endif %}
+    {% if not run.is_current %}
+    <button class="primary" id="revert">切回为现行结论</button>
+    <span id="revision-notice" role="status"></span>
+    {% else %}
+    <div class="empty">复核与签认只作用于现行结论；被替代版本可随时回看。</div>
+    {% endif %}
+  </div>
+</section>
+{% if comparison and comparison.records.details %}
+<section class="panel">
+  <div class="panel__head"><h2>差异明细</h2><span>{{comparison.records.counts.added + comparison.records.counts.removed + comparison.records.counts.changed}} 条</span></div>
+  <div class="table-scroll"><table class="ledger"><thead><tr><th>来源</th><th>申报编号</th><th>变化</th><th>成因</th><th>字段</th></tr></thead><tbody>{% for entry in comparison.records.details %}<tr data-cause="{{entry.cause}}"><td>{{entry.source_lines|join('/')}}</td><td>{{entry.claim_id}}</td><td>{{ {'added':'新增','removed':'移出','changed':'变更'}.get(entry.change, entry.change) }}</td><td>{{cause_labels.get(entry.cause, entry.cause)}}</td><td>{% for field in entry.fields %}{{labels.get(field.field, field.field)}} {{field.before}}→{{field.after}}{{'；' if not loop.last}}{% else %}—{% endfor %}</td></tr>{% endfor %}</tbody></table></div>
+  {% if comparison.records.details_truncated %}<div class="empty">另有 {{comparison.records.details_truncated}} 条未逐条列出。</div>{% endif %}
+</section>
+{% endif %}
+{% if comparison and comparison.metrics.changes %}
+<section class="panel">
+  <div class="panel__head"><h2>指标变化</h2><span>按阶段</span></div>
+  <div class="table-scroll"><table class="ledger"><thead><tr><th>阶段</th><th>指标</th><th>上一版</th><th>本版</th><th>成因</th></tr></thead><tbody>{% for entry in comparison.metrics.changes %}<tr><td>{{entry.stage_name}}</td><td>{{labels.get(entry.metric, entry.metric)}}</td><td>{{entry.before}}</td><td>{{entry.after}}</td><td>{{cause_labels.get(entry.cause, entry.cause)}}</td></tr>{% endfor %}</tbody></table></div>
+</section>
+{% endif %}
+{% if history|length > 1 %}
+<section class="panel">
+  <div class="panel__head"><h2>版本链</h2><span>{{history|length}} 版</span></div>
+  <div class="table-scroll"><table class="ledger"><thead><tr><th>批次</th><th>状态</th><th>版本</th><th>复核</th><th>规则</th><th>写入</th></tr></thead><tbody>{% for entry in history %}<tr data-current="{{'true' if entry.is_current else 'false'}}"><td><a href="?run={{entry.run_id}}">{{entry.run_id}}</a></td><td>{{state_labels.get(entry.state, entry.state)}}</td><td>V{{entry.version}}</td><td>{{entry.decision}}</td><td>{{entry.rule_version}}</td><td>{{entry.created_at[:19]}}</td></tr>{% endfor %}</tbody></table></div>
+</section>
+{% endif %}
